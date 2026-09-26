@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chat AR — Admin Panel</title>
+<style>
+body{font-family:system-ui,-apple-system,sans-serif;margin:0;background:#f4f6f8;color:#111827}header{background:#111827;color:#fff;padding:16px;font-size:20px;font-weight:800}.wrap{max-width:1100px;margin:auto;padding:14px}.card{background:#fff;border:1px solid #ddd;border-radius:14px;padding:15px;margin:12px 0;box-shadow:0 2px 8px #00000008}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}.stat{font-size:28px;font-weight:800;margin-top:5px}input,select{width:100%;box-sizing:border-box;padding:11px;margin:5px 0 10px;border:1px solid #cfd4dc;border-radius:9px;background:#fff}button{padding:10px 13px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:700;margin:3px;cursor:pointer}.danger{background:#b91c1c}.success{background:#047857}.muted{color:#6b7280;font-size:13px}.hidden{display:none}.msg{min-height:20px}.tablewrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:720px}th,td{text-align:left;padding:9px;border-bottom:1px solid #eee}.pill{padding:3px 7px;border-radius:99px;background:#eee;font-size:12px}.blocked{background:#fee2e2;color:#991b1b}.ok{background:#dcfce7;color:#166534}
+</style>
+</head>
+<body>
+<header>Chat AR — Secure Admin Panel</header>
+<main class="wrap">
+<section id="login" class="card">
+<h2>Admin Login</h2><p class="muted">Only the Supabase account whose profile has role = admin can use this panel.</p>
+<label>Email</label><input id="email" type="email" autocomplete="username" placeholder="Admin email">
+<label>Password</label><input id="password" type="password" autocomplete="current-password" placeholder="Password">
+<button id="loginBtn">Login</button><p id="loginMsg" class="msg"></p>
+</section>
+
+<section id="panel" class="hidden">
+<div class="grid">
+<div class="card">Users<div id="users" class="stat">—</div></div>
+<div class="card">Blocked<div id="blocked" class="stat">—</div></div>
+<div class="card">Admin<div id="adminEmail" class="muted">—</div></div>
+</div>
+
+<div class="card"><h3>Users</h3><input id="search" placeholder="Search email or name"><button id="refresh">Refresh</button>
+<div class="tablewrap"><table><thead><tr><th>Email</th><th>Role</th><th>Plan</th><th>Blocked</th><th>AI</th><th>Actions</th></tr></thead><tbody id="userRows"></tbody></table></div></div>
+
+<div class="card"><h3>Selected user controls</h3><p class="muted">Select a user from the table, then change access.</p>
+<div id="selected" class="muted">No user selected.</div>
+<label>Plan</label><select id="plan"><option value="free">Free</option><option value="paid">Paid</option><option value="vip">VIP</option><option value="admin">Admin</option></select>
+<button id="savePlan">Save Plan</button>
+<button id="toggleAI" class="success">Toggle AI Access</button>
+<button id="toggleBlock" class="danger">Block / Unblock</button>
+</div>
+
+<div class="card"><h3>Logout</h3><button id="logout">Logout</button></div>
+</section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = "https://taswuuiiekaknknytdxxc.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "PASTE_YOUR_SUPABASE_PUBLISHABLE_KEY_HERE";
+const FUNCTION_NAME = "admin-gateway";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+const $ = id => document.getElementById(id);
+let allUsers = [], selectedUser = null;
+
+function esc(v){return String(v??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));}
+
+async function call(action, extra={}){
+  const {data:{session}} = await sb.auth.getSession();
+  if(!session) throw new Error("Not logged in");
+  const {data,error} = await sb.functions.invoke(FUNCTION_NAME,{body:{action,...extra}});
+  if(error) throw new Error(error.message || "Function request failed");
+  if(data?.error) throw new Error(data.error);
+  return data;
+}
+
+function renderUsers(){
+  const q = ($("search").value||"").toLowerCase();
+  const list = allUsers.filter(x => ((x.email||"")+" "+(x.full_name||"")).toLowerCase().includes(q));
+  $("userRows").innerHTML = list.map(x => `
+    <tr>
+      <td>${esc(x.email)}</td><td>${esc(x.role||"user")}</td><td>${esc(x.plan||"free")}</td>
+      <td><span class="pill ${x.is_blocked?'blocked':'ok'}">${x.is_blocked?'YES':'NO'}</span></td>
+      <td>${x.ai_allowed===false?'NO':'YES'}</td>
+      <td><button onclick="selectUser('${x.id}')">Select</button></td>
+    </tr>`).join("") || '<tr><td colspan="6">No users found.</td></tr>';
+}
+
+window.selectUser = function(id){
+  selectedUser = allUsers.find(x=>x.id===id);
+  if(!selectedUser) return;
+  $("selected").textContent = selectedUser.email || selectedUser.id;
+  $("plan").value = selectedUser.plan || "free";
+  $("toggleAI").textContent = selectedUser.ai_allowed===false ? "Allow AI" : "Disable AI";
+  $("toggleBlock").textContent = selectedUser.is_blocked ? "Unblock User" : "Block User";
+};
+
+async function load(){
+  try{
+    const d = await call("dashboard");
+    $("users").textContent = d.users ?? 0;
+    $("blocked").textContent = d.blocked ?? 0;
+    $("adminEmail").textContent = d.admin || "—";
+    const u = await call("list_users");
+    allUsers = u.users || [];
+    renderUsers();
+  }catch(e){alert(e.message || e);}
+}
+
+$("loginBtn").onclick = async()=>{
+  $("loginMsg").textContent="";
+  const {error} = await sb.auth.signInWithPassword({email:$('email').value.trim(),password:$('password').value});
+  if(error){$("loginMsg").textContent=error.message;return;}
+  $("login").classList.add("hidden");$("panel").classList.remove("hidden");await load();
+};
+
+$("refresh").onclick = load;
+$("search").oninput = renderUsers;
+
+$("savePlan").onclick = async()=>{
+  if(!selectedUser) return alert("Select a user first.");
+  try{await call("set_plan",{user_id:selectedUser.id,plan:$('plan').value});alert("Plan saved");await load();selectUser(selectedUser.id);}catch(e){alert(e.message||e);}
+};
+
+$("toggleAI").onclick = async()=>{
+  if(!selectedUser) return alert("Select a user first.");
+  try{await call("set_ai_allowed",{user_id:selectedUser.id,allowed:selectedUser.ai_allowed===false});await load();selectUser(selectedUser.id);}catch(e){alert(e.message||e);}
+};
+
+$("toggleBlock").onclick = async()=>{
+  if(!selectedUser) return alert("Select a user first.");
+  try{await call("set_blocked",{user_id:selectedUser.id,blocked:!selectedUser.is_blocked});await load();selectUser(selectedUser.id);}catch(e){alert(e.message||e);}
+};
+
+$("logout").onclick = async()=>{await sb.auth.signOut();location.reload();};
+</script>
+</body></html>
