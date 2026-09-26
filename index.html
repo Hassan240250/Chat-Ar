@@ -70,7 +70,7 @@ if(typeof supabase==="undefined"){setStatus("Supabase library could not load. Re
  showUser();
  setStatus("Supabase connected. Add the publishable key and deploy the ai-gateway Edge Function for live AI.");
 }else setStatus("Setup required: add your Supabase publishable key in this file. Never put a service-role/secret key here.");
-
+sb_publishable_e49lThjs0UnofnTCEuRFPA_7aPeJCSu
 async function signup(){
  if(!sb)return alert("Supabase key is not configured.");
  const {data,error}=await sb.auth.signUp({email:email.value,password:password.value});
