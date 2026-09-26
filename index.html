@@ -58,30 +58,43 @@ small{color:#9eabd0}a{color:#91a8ff}
 
 <script>
 const SUPABASE_URL="https://taswuuiiekaknknytdxxc.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY="sb_publishable_e49lThjs0UnofnTCEuRFPA_7aPeJCSu";
+const SUPABASE_PUBLISHABLE_KEY="PASTE_YOUR_SUPABASE_PUBLISHABLE_KEY_HERE";
 const FUNCTION_NAME="ai-gateway";
 let sb=null;
 
 function setStatus(s){document.getElementById("status").textContent=s}
 function configured(){return !SUPABASE_PUBLISHABLE_KEY.includes("PASTE_YOUR")}
 if(typeof supabase==="undefined"){setStatus("Supabase library could not load. Refresh the page or try again.");}else if(configured()){
- sb=supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
+ sb=supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
  sb.auth.onAuthStateChange((_e,session)=>showUser(session));
  showUser();
- setStatus("Supabase connected. Add the publishable key and deploy the ai-gateway Edge Function for live AI.");
+ setStatus("Supabase connected. Account login/signup is ready. Live AI needs the ai-gateway Edge Function.");
 }else setStatus("Setup required: add your Supabase publishable key in this file. Never put a service-role/secret key here.");
+
 async function signup(){
  if(!sb)return alert("Supabase key is not configured.");
- const {data,error}=await sb.auth.signUp({email:email.value,password:password.value});
+ const emailEl=document.getElementById("email");
+ const passwordEl=document.getElementById("password");
+ const e=emailEl.value.trim();
+ const pw=passwordEl.value;
+ if(!e||!pw)return alert("Email aur password enter karein.");
+ if(pw.length<6)return alert("Password kam az kam 6 characters ka ho.");
+ try{
+ const {data,error}=await sb.auth.signUp({email:e,password:pw});
  if(error)return alert(error.message);
  alert("Account created. If email confirmation is enabled, check your email.");
  showUser(data.session);
+ }catch(e){alert("Supabase connection failed: "+(e?.message||e));}
 }
 async function login(){
  if(!sb)return alert("Supabase key is not configured.");
- const {data,error}=await sb.auth.signInWithPassword({email:email.value,password:password.value});
+ const emailEl=document.getElementById("email");
+ const passwordEl=document.getElementById("password");
+ try{
+ const {data,error}=await sb.auth.signInWithPassword({email:emailEl.value.trim(),password:passwordEl.value});
  if(error)return alert(error.message);
  showUser(data.session);
+ }catch(e){alert("Supabase connection failed: "+(e?.message||e));}
 }
 async function logout(){if(sb)await sb.auth.signOut();showUser(null)}
 async function showUser(session){
